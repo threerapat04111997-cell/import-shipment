@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Import Shipment</title>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<style>
+
+*{
+  box-sizing:border-box;
+}
+
+body{
+  margin:0;
+  font-family:Segoe UI,sans-serif;
+  background:#f4f6fb;
+}
+
+.container{
+  max-width:1600px;
+  margin:auto;
+  padding:20px;
+}
+
+.card{
+  background:#fff;
+  padding:20px;
+  border-radius:14px;
+  margin-bottom:20px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.08);
+  overflow-x:auto;
+}
+
+h2{
+  margin-top:0;
+}
+
+.top{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:12px;
+}
+
+input,select{
+  width:100%;
+  padding:10px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:14px;
+}
+
+.header,.row{
+  display:grid;
+  grid-template-columns:
+    minmax(120px,1fr)
+    minmax(180px,1.5fr)
+    minmax(180px,1.5fr)
+    minmax(100px,1fr)
+    minmax(90px,1fr)
+    minmax(90px,1fr)
+    minmax(120px,1fr)
+    60px;
+  gap:10px;
+  align-items:center;
+}
+
+.header{
+  background:#e8edff;
+  padding:10px;
+  border-radius:8px;
+  font-weight:bold;
+}
+
+.row{
+  margin-top:10px;
+}
+
+.sub{
+  display:none;
+  margin-top:10px;
+  background:#fff8dc;
+  padding:12px;
+  border-radius:10px;
+}
+
+.defectRow{
+  display:grid;
+  grid-template-columns:2fr 1fr 60px;
+  gap:10px;
+  margin-top:10px;
+}
+
+button{
+  border:none;
+  border-radius:8px;
+  padding:10px 14px;
+  cursor:pointer;
+  font-weight:bold;
+}
+
+.add{
+  background:#1976d2;
+  color:#fff;
+}
+
+.save{
+  background:#2e7d32;
+  color:#fff;
+}
+
+.export{
+  background:#ff9800;
+  color:#fff;
+}
+
+.del{
+  background:#d32f2f;
+  color:#fff;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th,td{
+  border:1px solid #ddd;
+  padding:8px;
+  text-align:center;
+}
+
+th{
+  background:#e8edff;
+}
+
+.loading{
+  color:#666;
+  padding:20px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>📦 Import Shipment</h2>
+
+<datalist id="defectList">
+
+<option value="ไม่มีฉลากภาษาไทย">
+<option value="สินค้าไม่ระบุวันที่ผลิต-ควรใช้งานก่อน">
+<option value="ฉลากสินค้าข้างกล่องผิด">
+<option value="วันหมดอายุมีเดือนเป็น Eng">
+<option value="สินค้าแพ็คฉีกขาด">
+<option value="ซีลสินค้าฉีกขาด">
+
+</datalist>
+
+<div class="card top">
+
+<input id="wh" placeholder="WH">
+
+<input type="date" id="date">
+
+<input id="sup" placeholder="Supplier">
+
+<input id="shipment" placeholder="Shipment">
+
+<input id="inv" placeholder="Invoice">
+
+<input id="total" placeholder="Total">
+
+</div>
+
+<div class="card">
+
+<div class="header">
+
+<div>Item</div>
+<div>TH</div>
+<div>EN</div>
+<div>Type</div>
+<div>Volume</div>
+<div>Issue</div>
+<div>Status</div>
+<div></div>
+
+</div>
+
+<div id="rows"></div>
+
+<br>
+
+<button class="add" onclick="addRow()">
++ เพิ่ม
+</button>
+
+<button class="save" onclick="saveData()">
+💾 Save
+</button>
+
+<button class="export" onclick="exportExcel()">
+📊 Export
+</button>
+
+</div>
+
+<div class="card">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>WH</th>
+<th>Date</th>
+<th>Supplier</th>
+<th>Item</th>
+<th>TH</th>
+<th>EN</th>
+<th>Type</th>
+<th>Status</th>
+<th>Shipment</th>
+<th>Invoice</th>
+<th>Total</th>
+<th>Volume</th>
+<th>Issue</th>
+<th>Action</th>
+
+</tr>
+
+</thead>
+
+<tbody id="tb">
+
+<tr>
+<td colspan="14" class="loading">
+Loading...
+</td>
+</tr>
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+<script type="module">
+
+/* =========================
+   FIREBASE
+========================= */
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+import {
+
+  getFirestore,
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  doc,
+  orderBy,
+  query
+
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* =========================
+   YOUR FIREBASE CONFIG
+========================= */
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDeW0B7V4Y5Z_-lgBuT0yc7tjIWaubldHE",
+
+  authDomain: "import-shipment.firebaseapp.com",
+
+  projectId: "import-shipment",
+
+  storageBucket: "import-shipment.firebasestorage.app",
+
+  messagingSenderId: "987740471486",
+
+  appId: "1:987740471486:web:811630f04151d5e83ddeef",
+
+  measurementId: "G-KE0CCQFWD7"
+};
+
+/* =========================
+   INIT
+========================= */
+
+const app = initializeApp(firebaseConfig);
+
+const db = getFirestore(app);
+
+/* =========================
+   FORMAT DATE
+========================= */
+
+function formatDate(dateStr){
+
+  if(!dateStr) return "";
+
+  const [y,m,d] = dateStr.split("-");
+
+  return `${d}/${m}/${y}`;
+
+}
+
+/* =========================
+   ADD DEFECT
+========================= */
+
+window.addDefect = function(btn){
+
+  const defects = btn.parentElement.querySelector(".defects");
+
+  const div = document.createElement("div");
+
+  div.className = "defectRow";
+
+  div.innerHTML = `
+
+    <input
+      class="defect"
+      list="defectList"
+      placeholder="เลือก defect"
+    >
+
+    <input
+      class="percent"
+      type="number"
+      placeholder="%"
+    >
+
+    <button
+      type="button"
+      class="del"
+    >
+      X
+    </button>
+
+  `;
+
+  div.querySelector(".del").onclick = ()=>{
+
+    div.remove();
+
+  };
+
+  defects.appendChild(div);
+
+};
+
+/* =========================
+   ADD ROW
+========================= */
+
+window.addRow = function(){
+
+  const wrap = document.createElement("div");
+
+  wrap.innerHTML = `
+
+  <div class="row">
+
+    <input class="item">
+
+    <input class="th">
+
+    <input class="en">
+
+    <select class="ptype">
+
+      <option value="">-</option>
+      <option>DF</option>
+      <option>NF</option>
+
+    </select>
+
+    <input type="number" class="vol">
+
+    <input type="number" class="issue">
+
+    <select class="status">
+
+      <option>Pass</option>
+      <option>Reject</option>
+
+    </select>
+
+    <button class="del">
+      X
+    </button>
+
+  </div>
+
+  <div class="sub">
+
+    <div class="defects"></div>
+
+    <br>
+
+    <button
+      type="button"
+      class="add addDefectBtn"
+    >
+      + Defect
+    </button>
+
+  </div>
+
+  `;
+
+  document.getElementById("rows").appendChild(wrap);
+
+  const vol = wrap.querySelector(".vol");
+
+  const issue = wrap.querySelector(".issue");
+
+  const status = wrap.querySelector(".status");
+
+  const sub = wrap.querySelector(".sub");
+
+  function update(){
+
+    const v = +vol.value || 0;
+
+    const i = +issue.value || 0;
+
+    if(status.value === "Reject"){
+
+      sub.style.display = "block";
+
+      sub.querySelectorAll(".percent").forEach(p=>{
+
+        if(v > 0){
+
+          p.value = ((i/v)*100).toFixed(2);
+
+        }
+
+      });
+
+    }else{
+
+      sub.style.display = "none";
+
+    }
+
+  }
+
+  vol.oninput = update;
+
+  issue.oninput = update;
+
+  status.onchange = update;
+
+  wrap.querySelector(".del").onclick = ()=>{
+
+    wrap.remove();
+
+  };
+
+  wrap.querySelector(".addDefectBtn").onclick = function(){
+
+    addDefect(this);
+
+    update();
+
+  };
+
+  addDefect(wrap.querySelector(".addDefectBtn"));
+
+  update();
+
+};
+
+/* =========================
+   SAVE
+========================= */
+
+window.saveData = async function(){
+
+  try{
+
+    const rows = [];
+
+    document.querySelectorAll("#rows > div").forEach(w=>{
+
+      const r = w.querySelector(".row");
+
+      const sub = w.querySelector(".sub");
+
+      const obj = {
+
+        item:r.querySelector(".item").value,
+
+        th:r.querySelector(".th").value,
+
+        en:r.querySelector(".en").value,
+
+        type:r.querySelector(".ptype").value,
+
+        vol:r.querySelector(".vol").value,
+
+        issue:r.querySelector(".issue").value,
+
+        status:r.querySelector(".status").value,
+
+        defects:[]
+
+      };
+
+      if(obj.status === "Reject"){
+
+        sub.querySelectorAll(".defectRow").forEach(d=>{
+
+          obj.defects.push({
+
+            defect:d.querySelector(".defect").value,
+
+            percent:d.querySelector(".percent").value
+
+          });
+
+        });
+
+      }
+
+      rows.push(obj);
+
+    });
+
+    const payload = {
+
+      top:{
+
+        wh:wh.value,
+
+        date:date.value,
+
+        sup:sup.value,
+
+        shipment:shipment.value,
+
+        inv:inv.value,
+
+        total:total.value
+
+      },
+
+      rows:rows,
+
+      createdAt:new Date().toISOString()
+
+    };
+
+    await addDoc(
+
+      collection(db,"qaData"),
+
+      payload
+
+    );
+
+    alert("บันทึกสำเร็จ");
+
+    clearForm();
+
+    render();
+
+  }catch(err){
+
+    console.error(err);
+
+    alert("Save ไม่สำเร็จ");
+
+  }
+
+};
+
+/* =========================
+   CLEAR FORM
+========================= */
+
+function clearForm(){
+
+  wh.value = "";
+  date.value = "";
+  sup.value = "";
+  shipment.value = "";
+  inv.value = "";
+  total.value = "";
+
+  document.getElementById("rows").innerHTML = "";
+
+  addRow();
+
+}
+
+/* =========================
+   RENDER
+========================= */
+
+async function render(){
+
+  const tb = document.getElementById("tb");
+
+  tb.innerHTML = "";
+
+  try{
+
+    const q = query(
+
+      collection(db,"qaData"),
+
+      orderBy("createdAt","desc")
+
+    );
+
+    const snapshot = await getDocs(q);
+
+    if(snapshot.empty){
+
+      tb.innerHTML = `
+
+      <tr>
+
+        <td colspan="14">
+          ไม่มีข้อมูล
+        </td>
+
+      </tr>
+
+      `;
+
+      return;
+
+    }
+
+    snapshot.forEach(d=>{
+
+      const g = {
+
+        id:d.id,
+
+        ...d.data()
+
+      };
+
+      g.rows.forEach((r,ri)=>{
+
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+
+        <td>${g.top.wh}</td>
+
+        <td>${formatDate(g.top.date)}</td>
+
+        <td>${g.top.sup}</td>
+
+        <td>${r.item}</td>
+
+        <td>${r.th}</td>
+
+        <td>${r.en}</td>
+
+        <td>${r.type}</td>
+
+        <td>${r.status}</td>
+
+        <td>${g.top.shipment}</td>
+
+        <td>${g.top.inv}</td>
+
+        <td>${ri===0?g.top.total:""}</td>
+
+        <td>${r.vol}</td>
+
+        <td>${r.issue}</td>
+
+        <td>
+
+          <button
+            class="del"
+            onclick="deleteData('${g.id}')"
+          >
+            ลบ
+          </button>
+
+        </td>
+
+        `;
+
+        tb.appendChild(tr);
+
+      });
+
+    });
+
+  }catch(err){
+
+    console.error(err);
+
+    tb.innerHTML = `
+
+    <tr>
+
+      <td colspan="14">
+        โหลดข้อมูลไม่สำเร็จ
+      </td>
+
+    </tr>
+
+    `;
+
+  }
+
+}
+
+/* =========================
+   DELETE
+========================= */
+
+window.deleteData = async function(id){
+
+  const ok = confirm("ลบข้อมูล ?");
+
+  if(!ok) return;
+
+  try{
+
+    await deleteDoc(
+
+      doc(db,"qaData",id)
+
+    );
+
+    render();
+
+  }catch(err){
+
+    console.error(err);
+
+    alert("ลบไม่สำเร็จ");
+
+  }
+
+};
+
+/* =========================
+   EXPORT EXCEL
+========================= */
+
+window.exportExcel = async function(){
+
+  try{
+
+    const snapshot = await getDocs(
+
+      collection(db,"qaData")
+
+    );
+
+    const data = [];
+
+    snapshot.forEach(d=>{
+
+      data.push(d.data());
+
+    });
+
+    if(!data.length){
+
+      alert("ไม่มีข้อมูล");
+
+      return;
+
+    }
+
+    const defSet = new Set();
+
+    data.forEach(g=>{
+
+      g.rows.forEach(r=>{
+
+        (r.defects || []).forEach(d=>{
+
+          if(d.defect){
+
+            defSet.add(d.defect);
+
+          }
+
+        });
+
+      });
+
+    });
+
+    const defects = [...defSet];
+
+    const rows = [];
+
+    data.forEach(g=>{
+
+      g.rows.forEach((r,i)=>{
+
+        const obj = {
+
+          WH:g.top.wh,
+          Date:formatDate(g.top.date),
+          Supplier:g.top.sup,
+          Item:r.item,
+          TH:r.th,
+          EN:r.en,
+          Type:r.type,
+          Status:r.status,
+          Shipment:g.top.shipment,
+          Invoice:g.top.inv,
+          Total:i===0?g.top.total:"",
+          Volume:r.vol,
+          Issue:r.issue
+
+        };
+
+        defects.forEach(d=>{
+
+          obj[d] = "";
+
+        });
+
+        (r.defects || []).forEach(df=>{
+
+          if(df.defect){
+
+            obj[df.defect] = Number(df.percent)||0;
+
+          }
+
+        });
+
+        rows.push(obj);
+
+      });
+
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+
+      wb,
+      ws,
+      "QA"
+
+    );
+
+    XLSX.writeFile(
+
+      wb,
+      "Import_Shipment.xlsx"
+
+    );
+
+  }catch(err){
+
+    console.error(err);
+
+    alert("Export ไม่สำเร็จ");
+
+  }
+
+};
+
+/* =========================
+   START
+========================= */
+
+window.onload = ()=>{
+
+  addRow();
+
+  render();
+
+};
+
+</script>
+
+</body>
+</html>
+```
